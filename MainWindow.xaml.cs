@@ -1,5 +1,6 @@
 ﻿using SquareMinecraftLauncher.Minecraft;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -16,19 +17,34 @@ namespace MinecraftDownloader
         Gac.DownLoadFile downloadFile = new Gac.DownLoadFile();
         public static int id = 0;
         string downloadVersion;
+        List<DownloadItem> list = new List<DownloadItem>();
         internal int Download(string path, string url)
         {
             this.downloadFile.AddDown(url, path.Replace(System.IO.Path.GetFileName(path), ""), System.IO.Path.GetFileName(path), id);
             this.downloadFile.StartDown(3);
             id++;
+            list.Add(new DownloadItem { id = id - 1, msg = "" });
             return id - 1;
         }
         public MainWindow()
         {
-            tools.DownloadSourceInitialization(DownloadSource.MCBBSSource);
+            tools.DownloadSourceInitialization(DownloadSource.MCBBSSource);//mcbbs要慎重使用，经常不稳定。最好用bmclapi,但比较慢
             InitializeComponent();
             initDataGrid();
+            downloadFile.doSendMsg += DownloadFile_doSendMsg;
         }
+
+        private void DownloadFile_doSendMsg(Gac.DownMsg msg)
+        {
+            for(int i = 0;i < list.Count;i++)
+            {
+                if(list[i].id == msg.Id)
+                {
+                    list[i].msg = msg.Tag == Gac.DownStatus.End ? "完成" : msg.Tag == Gac.DownStatus.Error ? "错误" : "下载中";
+                }
+            }
+        }
+
         public async void initDataGrid()
         {
             MCVersionDataGrid.ItemsSource = await tools.GetMCVersionList();
@@ -47,17 +63,7 @@ namespace MinecraftDownloader
                 await downloadMinecraftAssetsFile();
                 // Download Libraries Files
                 MessageBox.Show("libraries");
-                MCDownload[] libraries = tools.GetMissingFile(downloadVersion);
-                while (libraries.Length > 0)
-                {
-                    MessageBox.Show("还有"+libraries.Length.ToString()+"个文件");
-                    foreach (MCDownload lib in libraries)
-                    {
-                        Download(lib.path, lib.Url);
-                    }
-                    libraries = tools.GetMissingFile(downloadVersion);
-                    Thread.Sleep(500);
-                }
+                await Libraries(downloadVersion);
                 // Download completed
                 MessageBox.Show("下载完成");
             }
@@ -77,11 +83,48 @@ namespace MinecraftDownloader
         {
             AssetDownload assetDownload = new AssetDownload();
             assetDownload.DownloadProgressChanged += AssetDownload_DownloadProgressChanged;
-            await assetDownload.BuildAssetDownload(64, downloadVersion);
+            await assetDownload.BuildAssetDownload(1000, downloadVersion);
         }
-        static void AssetDownload_DownloadProgressChanged(AssetDownload.DownloadIntermation Log)
+        private void AssetDownload_DownloadProgressChanged(AssetDownload.DownloadIntermation Log)
         {
-            Console.WriteLine(Log + "/" + Log + "  " + Log.Progress + "  " + Log.Speed);
+            Dispatcher.Invoke(new Action(() =>
+            {
+                progress.Value = Log.Progress;
+                Console.WriteLine(Log.Progress + "  " + Log.Speed);
+            }));
         }
+
+        public async Task Libraries(string version)
+        {
+            MCDownload[] libraries = tools.GetMissingFile(version);
+            if (libraries.Length == 0) return;
+            MessageBox.Show("还有" + libraries.Length.ToString() + "个文件");
+            foreach (MCDownload lib in libraries)
+            {
+                Download(lib.path, lib.Url);
+            }
+            await Task.Run(() =>
+            {
+                while (list.Count != 0)
+                {
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        if (list[i].msg == "错误" || list[i].msg == "完成")
+                        {
+                            list.RemoveAt(i);
+                        }
+                    }
+                    Thread.Sleep(500);
+                }
+            });
+            await Libraries(version);
+        }
+        
+    }
+
+    public class DownloadItem
+    {
+        public int id { set; get; }
+        public string msg { set; get; }
     }
 }
