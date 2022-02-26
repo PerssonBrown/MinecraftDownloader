@@ -9,5 +9,6 @@
     <Grid>
         <DataGrid x:Name="MCVersionDataGrid" Margin="130,10,130,197" SelectionMode="Single"/>
         <Button Content="Download" FontSize="14" Click="Button_Click" Margin="309,320,309,31"/>
+        <ProgressBar x:Name="progress" Margin="0,264,0,140" />
     </Grid>
 </Window>
